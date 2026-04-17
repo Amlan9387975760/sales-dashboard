@@ -397,7 +397,7 @@ async function saveCompany() {
         const payload = { key: SECRET_KEY, action: id ? 'update' : 'add', name, status, notes };
         if (id) payload.id = parseInt(id);
 
-        const res  = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
+        const res  = await fetch(`${SCRIPT_URL}?${new URLSearchParams(payload)}`);
         const json = await res.json();
 
         if (json.success) {
@@ -421,7 +421,7 @@ async function delCompany(id) {
     if (!c || !confirm(`Delete "${c.name}"? This cannot be undone.`)) return;
 
     try {
-        const res  = await fetch(SCRIPT_URL, { method: 'POST', body: JSON.stringify({ key: SECRET_KEY, action: 'delete', id }) });
+        const res  = await fetch(`${SCRIPT_URL}?${new URLSearchParams({ key: SECRET_KEY, action: 'delete', id })}`);
         const json = await res.json();
         if (json.success) { await loadData(); showToast('Company deleted.', 'secondary'); }
         else showToast('Error: ' + (json.error || 'Unknown'), 'danger');
