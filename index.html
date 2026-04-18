@@ -79,7 +79,6 @@
 </head>
 <body>
 
-<!-- Loading -->
 <div id="loadingSpinner">
     <div class="spinner-border text-primary" style="width:2.5rem;height:2.5rem;"></div>
     <span class="text-muted small">Loading dashboard…</span>
@@ -89,7 +88,7 @@
 <div class="topbar">
     <div class="topbar-brand"><i class="fas fa-chart-bar"></i>Sales Dashboard</div>
     <div class="d-flex gap-2">
-        <button class="btn btn-sm btn-outline-light" onclick="loadData()" title="Refresh data">
+        <button class="btn btn-sm btn-outline-light" onclick="loadData()" title="Refresh">
             <i class="fas fa-rotate-right"></i>
         </button>
         <button class="btn btn-sm btn-outline-light fw-semibold" onclick="openPdfModal()">
@@ -106,8 +105,7 @@
 
     <div id="setupBanner" class="setup-banner mb-4" style="display:none">
         <i class="fas fa-triangle-exclamation me-2"></i>
-        <strong>One-time setup needed:</strong>
-        Set <code>SCRIPT_URL</code> and <code>SECRET_KEY</code> in this file.
+        <strong>One-time setup needed:</strong> Set <code>SCRIPT_URL</code> and <code>SECRET_KEY</code> in this file.
     </div>
 
     <!-- Stats -->
@@ -154,16 +152,8 @@
         </div>
     </div>
 
-    <!-- Important Points Panel -->
-    <div class="imp-panel mb-4" id="impPanel" style="display:none">
-        <div class="imp-panel-title">
-            <i class="fas fa-star me-1" style="color:#d97706"></i>Important Points
-        </div>
-        <div id="impList"></div>
-    </div>
-
     <!-- Table -->
-    <div class="card p-3">
+    <div class="card p-3 mb-4">
         <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
             <span class="fw-semibold">All Companies</span>
             <input type="search" id="searchBox" class="form-control form-control-sm"
@@ -187,6 +177,15 @@
             </table>
         </div>
     </div>
+
+    <!-- Important Points Panel — below the table -->
+    <div class="imp-panel" id="impPanel" style="display:none">
+        <div class="imp-panel-title">
+            <i class="fas fa-star me-1" style="color:#d97706"></i>Important Points
+        </div>
+        <div id="impList"></div>
+    </div>
+
 </div>
 
 <!-- Add / Edit Modal -->
@@ -208,7 +207,7 @@
                 <div class="mb-3">
                     <label class="form-label small fw-semibold">Instance <span class="text-muted fw-normal">(optional)</span></label>
                     <select class="form-select" id="fInstance">
-                        <option value="" disabled selected hidden style="color:#adb5bd">India, US, Europe…</option>
+                        <option value="" disabled selected hidden>India, US, Europe…</option>
                         <option value="INDIA">INDIA</option>
                         <option value="US">US</option>
                         <option value="EUROPE">EUROPE</option>
@@ -238,7 +237,7 @@
                     <textarea class="form-control" id="fImportantPoints" rows="3"
                         placeholder="Key highlights, action items, or critical remarks…"></textarea>
                     <div class="form-text" style="color:#92400e;font-size:0.75rem">
-                        <i class="fas fa-info-circle me-1"></i>Highlighted in the dashboard panel above the table.
+                        <i class="fas fa-info-circle me-1"></i>Saved to the sheet and shown below the companies table.
                     </div>
                 </div>
             </div>
@@ -299,11 +298,9 @@
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw6tJN86RliD7LF3SqqOf_YSbjsI2UU9OWTak4F0a3H0av46jwxYrLt6lRxPf4_LwX2iQ/exec';
 const SECRET_KEY = 'sales2024secret';
-const LS_KEY     = 'vc_imp_points'; // localStorage key for important points
 
 let companies = [];
 let pieInst, barInst;
-let pendingPoints = null; // { name, points } for a newly added company
 
 const bsModal    = new bootstrap.Modal(document.getElementById('companyModal'));
 const bsPdfModal = new bootstrap.Modal(document.getElementById('pdfModal'));
@@ -313,23 +310,6 @@ const STATUS_COLORS = {
     'Demo':         '#d97706',
     'Demo Expired': '#dc2626'
 };
-
-// ── localStorage helpers ──────────────────────────────────────
-function lsGet() {
-    try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; }
-}
-function lsSet(id, points) {
-    const store = lsGet();
-    if (points) store[String(id)] = points;
-    else delete store[String(id)];
-    localStorage.setItem(LS_KEY, JSON.stringify(store));
-}
-function lsMerge() {
-    const store = lsGet();
-    companies.forEach(c => {
-        c.importantPoints = store[String(c.id)] || '';
-    });
-}
 
 // ── Load ──────────────────────────────────────────────────────
 async function loadData() {
@@ -354,17 +334,10 @@ async function loadData() {
 }
 
 function finishLoad() {
-    // Resolve pending important points for a just-added company (id unknown until now)
-    if (pendingPoints) {
-        const c = companies.find(x => x.name === pendingPoints.name);
-        if (c) lsSet(c.id, pendingPoints.points);
-        pendingPoints = null;
-    }
-    lsMerge();
     renderStats();
     drawCharts();
-    renderImportantPoints();
     renderTable();
+    renderImportantPoints();
     setLoading(false);
 }
 
@@ -397,10 +370,7 @@ function drawCharts() {
 
     pieInst = new Chart(document.getElementById('pieChart'), {
         type: 'doughnut',
-        data: {
-            labels,
-            datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: '#fff', hoverOffset: 6 }]
-        },
+        data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 2, borderColor: '#fff', hoverOffset: 6 }] },
         options: {
             responsive: true, maintainAspectRatio: false, cutout: '60%',
             plugins: { legend: { position: 'bottom', labels: { padding: 18, font: { size: 12 } } } }
@@ -411,15 +381,7 @@ function drawCharts() {
         type: 'bar',
         data: {
             labels,
-            datasets: [{
-                label: 'Companies',
-                data: values,
-                backgroundColor: colors.map(c => c + 'cc'),
-                borderColor: colors,
-                borderWidth: 2,
-                borderRadius: 8,
-                borderSkipped: false
-            }]
+            datasets: [{ label: 'Companies', data: values, backgroundColor: colors.map(c => c + 'cc'), borderColor: colors, borderWidth: 2, borderRadius: 8, borderSkipped: false }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,
@@ -430,30 +392,6 @@ function drawCharts() {
             }
         }
     });
-}
-
-// ── Important Points Panel ────────────────────────────────────
-function renderImportantPoints() {
-    const withPoints = companies.filter(c => (c.importantPoints || '').trim());
-    const panel = document.getElementById('impPanel');
-    const list  = document.getElementById('impList');
-
-    if (!withPoints.length) { panel.style.display = 'none'; return; }
-    panel.style.display = 'block';
-
-    list.innerHTML = withPoints.map(c => {
-        const cls  = c.status === 'Active' ? 'imp-active' : c.status === 'Demo' ? 'imp-demo' : 'imp-expired';
-        const inst = c.instance ? `<span class="inst-badge">${esc(c.instance)}</span>` : '';
-        return `
-            <div class="imp-item ${cls}">
-                <div class="imp-header">
-                    <span class="badge-pill ${badgeClass(c.status)}">${esc(c.status)}</span>
-                    <span class="company-lbl">${esc(c.name)}</span>
-                    ${inst}
-                </div>
-                <div class="imp-text">${esc(c.importantPoints)}</div>
-            </div>`;
-    }).join('');
 }
 
 // ── Table ─────────────────────────────────────────────────────
@@ -499,10 +437,34 @@ function renderTable() {
     `).join('');
 }
 
-// ── Modal helpers ─────────────────────────────────────────────
+// ── Important Points (below table, from backend) ──────────────
+function renderImportantPoints() {
+    const withPoints = companies.filter(c => (c.importantPoints || '').trim());
+    const panel = document.getElementById('impPanel');
+    const list  = document.getElementById('impList');
+
+    if (!withPoints.length) { panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+
+    list.innerHTML = withPoints.map(c => {
+        const cls  = c.status === 'Active' ? 'imp-active' : c.status === 'Demo' ? 'imp-demo' : 'imp-expired';
+        const inst = c.instance ? `<span class="inst-badge">${esc(c.instance)}</span>` : '';
+        return `
+            <div class="imp-item ${cls}">
+                <div class="imp-header">
+                    <span class="badge-pill ${badgeClass(c.status)}">${esc(c.status)}</span>
+                    <span class="company-lbl">${esc(c.name)}</span>
+                    ${inst}
+                </div>
+                <div class="imp-text">${esc(c.importantPoints)}</div>
+            </div>`;
+    }).join('');
+}
+
+// ── Modal ─────────────────────────────────────────────────────
 function openModal(company = null) {
-    document.getElementById('modalHeading').textContent  = company ? 'Edit Company' : 'Add Company';
-    document.getElementById('editRowId').value           = company ? company.id : '';
+    document.getElementById('modalHeading').textContent   = company ? 'Edit Company' : 'Add Company';
+    document.getElementById('editRowId').value            = company ? company.id : '';
     document.getElementById('fName').value               = company ? company.name : '';
     document.getElementById('fInstance').value           = company ? (company.instance || '') : '';
     document.getElementById('fStatus').value             = company ? company.status : 'Active';
@@ -540,20 +502,13 @@ async function saveCompany() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
 
     try {
-        const payload = { key: SECRET_KEY, action: id ? 'update' : 'add', name, instance, status, notes };
+        const payload = { key: SECRET_KEY, action: id ? 'update' : 'add', name, instance, status, notes, importantPoints };
         if (id) payload.id = parseInt(id);
 
         const res  = await fetch(`${SCRIPT_URL}?${new URLSearchParams(payload)}`);
         const json = await res.json();
 
         if (json.success) {
-            // Save important points to localStorage (backend doesn't handle this field)
-            if (id) {
-                lsSet(parseInt(id), importantPoints);
-            } else {
-                // ID not known yet — resolve after loadData finds the new company
-                pendingPoints = importantPoints ? { name, points: importantPoints } : null;
-            }
             bsModal.hide();
             await loadData();
             showToast(id ? 'Company updated.' : 'Company added.', 'success');
@@ -572,17 +527,11 @@ async function saveCompany() {
 async function delCompany(id) {
     const c = companies.find(x => x.id === id);
     if (!c || !confirm(`Delete "${c.name}"? This cannot be undone.`)) return;
-
     try {
         const res  = await fetch(`${SCRIPT_URL}?${new URLSearchParams({ key: SECRET_KEY, action: 'delete', id })}`);
         const json = await res.json();
-        if (json.success) {
-            lsSet(id, ''); // clean up localStorage
-            await loadData();
-            showToast('Company deleted.', 'secondary');
-        } else {
-            showToast('Error: ' + (json.error || 'Unknown'), 'danger');
-        }
+        if (json.success) { await loadData(); showToast('Company deleted.', 'secondary'); }
+        else showToast('Error: ' + (json.error || 'Unknown'), 'danger');
     } catch (e) {
         showToast('Network error — please try again.', 'danger');
     }
@@ -603,7 +552,6 @@ function getPdfFiltered() {
     const from   = document.getElementById('pdfFrom').value;
     const to     = document.getElementById('pdfTo').value;
     const status = document.getElementById('pdfStatus').value;
-
     return companies.filter(c => {
         const d = c.dateAdded ? new Date(c.dateAdded).toISOString().split('T')[0] : null;
         if (from && d && d < from) return false;
@@ -624,12 +572,11 @@ function downloadPdf() {
     if (!filtered.length) { showToast('No companies match the selected filters.', 'warning'); return; }
 
     const { jsPDF } = window.jspdf;
-    const doc  = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const doc    = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const from   = document.getElementById('pdfFrom').value;
     const to     = document.getElementById('pdfTo').value;
     const status = document.getElementById('pdfStatus').value;
 
-    // Header band
     doc.setFillColor(26, 58, 110);
     doc.rect(0, 0, 297, 22, 'F');
     doc.setTextColor(255, 255, 255);
@@ -640,7 +587,6 @@ function downloadPdf() {
     doc.setFont(undefined, 'normal');
     doc.text(`Period: ${from || 'All time'} → ${to || 'today'}${status ? '  |  Status: ' + status : ''}  |  Generated: ${new Date().toLocaleDateString('en-GB')}`, 14, 18);
 
-    // Summary
     const counts = countByStatus(filtered);
     doc.setTextColor(30, 30, 30);
     doc.setFontSize(8.5);
@@ -650,26 +596,10 @@ function downloadPdf() {
     doc.autoTable({
         startY: 33,
         head: [['#', 'Company Name', 'Instance', 'Status', 'Notes', 'Important Points', 'Date Added']],
-        body: filtered.map((c, i) => [
-            i + 1,
-            c.name || '',
-            c.instance || '—',
-            c.status || '',
-            c.notes || '—',
-            c.importantPoints || '—',
-            fmtDate(c.dateAdded)
-        ]),
+        body: filtered.map((c, i) => [i + 1, c.name || '', c.instance || '—', c.status || '', c.notes || '—', c.importantPoints || '—', fmtDate(c.dateAdded)]),
         styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
         headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold', fontSize: 8 },
-        columnStyles: {
-            0: { cellWidth: 10 },
-            1: { cellWidth: 44 },
-            2: { cellWidth: 22 },
-            3: { cellWidth: 28 },
-            4: { cellWidth: 50 },
-            5: { cellWidth: 68 },
-            6: { cellWidth: 28 }
-        },
+        columnStyles: { 0: { cellWidth: 10 }, 1: { cellWidth: 44 }, 2: { cellWidth: 22 }, 3: { cellWidth: 28 }, 4: { cellWidth: 50 }, 5: { cellWidth: 68 }, 6: { cellWidth: 28 } },
         alternateRowStyles: { fillColor: [248, 250, 252] },
         didParseCell: (data) => {
             if (data.section === 'body' && data.column.index === 3) {
@@ -679,8 +609,8 @@ function downloadPdf() {
                 data.cell.styles.fontStyle = 'bold';
             }
             if (data.section === 'body' && data.column.index === 5 && data.cell.raw !== '—') {
-                data.cell.styles.fontStyle  = 'bold';
-                data.cell.styles.textColor  = [92, 60, 6];
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.textColor = [92, 60, 6];
             }
         }
     });
