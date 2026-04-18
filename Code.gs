@@ -1,121 +1,134 @@
 // ═══════════════════════════════════════════════════════════════
 //  Sales Dashboard — Google Apps Script Backend
-//  Sheet columns: ID | Name | Instance | Status | Notes | Important Points | Date Added
+//  Works with existing sheet structure, auto-adds new columns
 // ═══════════════════════════════════════════════════════════════
 
-const SECRET_KEY = 'sales2024secret'; // must match index.html
-const SHEET_NAME = 'Companies';       // tab name in your Google Sheet
-
-// Column index map (1-based)
-const COL = {
-  ID:               1,
-  NAME:             2,
-  INSTANCE:         3,
-  STATUS:           4,
-  NOTES:            5,
-  IMPORTANT_POINTS: 6,
-  DATE_ADDED:       7
-};
-const TOTAL_COLS = 7;
+const SECRET_KEY = 'sales2024secret';
 
 function doGet(e) {
   try {
     const p = e.parameter;
     if (p.key !== SECRET_KEY) return json({ error: 'Unauthorized' });
 
-    const sheet = getSheet();
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+    ensureColumns(sheet);
 
     switch (p.action) {
-      case 'getAll':  return json({ companies: getAll(sheet) });
-      case 'add':     return json(addCompany(sheet, p));
-      case 'update':  return json(updateCompany(sheet, p));
-      case 'delete':  return json(deleteCompany(sheet, p));
-      default:        return json({ error: 'Unknown action' });
+      case 'getAll': return json({ companies: getAll(sheet) });
+      case 'add':    return json(addCompany(sheet, p));
+      case 'update': return json(updateCompany(sheet, p));
+      case 'delete': return json(deleteCompany(sheet, p));
+      default:       return json({ error: 'Unknown action' });
     }
   } catch (err) {
     return json({ error: err.message });
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────────
-function getSheet() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) {
-    sheet = ss.insertSheet(SHEET_NAME);
-    sheet.getRange(1, 1, 1, TOTAL_COLS).setValues([[
-      'ID', 'Name', 'Instance', 'Status', 'Notes', 'Important Points', 'Date Added'
-    ]]);
-    sheet.getRange(1, 1, 1, TOTAL_COLS).setFontWeight('bold').setBackground('#1a3a6e').setFontColor('#ffffff');
-    sheet.setFrozenRows(1);
+// Auto-add Instance and Important Points columns if missing
+function ensureColumns(sheet) {
+  const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  if (!headers.includes('Instance')) {
+    sheet.getRange(1, headers.length + 1).setValue('Instance');
+    headers.push('Instance');
   }
-  return sheet;
+  if (!headers.includes('Important Points')) {
+    const updatedLen = sheet.getLastColumn();
+    sheet.getRange(1, updatedLen + 1).setValue('Important Points');
+  }
+}
+
+function getHeaders(sheet) {
+  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+}
+
+function colIndex(headers, name) {
+  return headers.indexOf(name); // 0-based
 }
 
 function getAll(sheet) {
-  const data = sheet.getDataRange().getValues();
-  if (data.length <= 1) return [];
+  const lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return [];
 
-  return data.slice(1).map(row => ({
-    id:              Number(row[COL.ID - 1]),
-    name:            row[COL.NAME - 1]             || '',
-    instance:        row[COL.INSTANCE - 1]         || '',
-    status:          row[COL.STATUS - 1]           || '',
-    notes:           row[COL.NOTES - 1]            || '',
-    importantPoints: row[COL.IMPORTANT_POINTS - 1] || '',
-    dateAdded:       row[COL.DATE_ADDED - 1]       ? new Date(row[COL.DATE_ADDED - 1]).toISOString() : ''
-  })).filter(c => c.id);
+  const headers  = getHeaders(sheet);
+  const lastCol  = sheet.getLastColumn();
+  const data     = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+
+  const iName   = colIndex(headers, 'Company Name');
+  const iStatus = colIndex(headers, 'Status');
+  const iNotes  = colIndex(headers, 'Notes');
+  const iDate   = colIndex(headers, 'Date Added');
+  const iInst   = colIndex(headers, 'Instance');
+  const iImp    = colIndex(headers, 'Important Points');
+
+  return data
+    .map((row, i) => ({
+      id:              i + 2,
+      name:            iName   >= 0 ? (row[iName]   || '') : '',
+      status:          iStatus >= 0 ? (row[iStatus] || '') : '',
+      notes:           iNotes  >= 0 ? (row[iNotes]  || '') : '',
+      dateAdded:       iDate   >= 0 && row[iDate] ? new Date(row[iDate]).toISOString() : '',
+      instance:        iInst   >= 0 ? (row[iInst]   || '') : '',
+      importantPoints: iImp    >= 0 ? (row[iImp]    || '') : ''
+    }))
+    .filter(c => c.name);
 }
 
 function addCompany(sheet, p) {
-  const id        = nextId(sheet);
-  const dateAdded = new Date();
-  sheet.appendRow([
-    id,
-    sanitize(p.name),
-    sanitize(p.instance),
-    sanitize(p.status),
-    sanitize(p.notes),
-    sanitize(p.importantPoints),
-    dateAdded
-  ]);
-  return { success: true, id };
+  const headers = getHeaders(sheet);
+  const now     = new Date();
+
+  // Build row matching existing columns
+  const iName   = colIndex(headers, 'Company Name');
+  const iStatus = colIndex(headers, 'Status');
+  const iNotes  = colIndex(headers, 'Notes');
+  const iDate   = colIndex(headers, 'Date Added');
+  const iLast   = colIndex(headers, 'Last Updated');
+  const iInst   = colIndex(headers, 'Instance');
+  const iImp    = colIndex(headers, 'Important Points');
+
+  const row = new Array(headers.length).fill('');
+  if (iName   >= 0) row[iName]   = sanitize(p.name);
+  if (iStatus >= 0) row[iStatus] = sanitize(p.status);
+  if (iNotes  >= 0) row[iNotes]  = sanitize(p.notes);
+  if (iDate   >= 0) row[iDate]   = now;
+  if (iLast   >= 0) row[iLast]   = now;
+  if (iInst   >= 0) row[iInst]   = sanitize(p.instance);
+  if (iImp    >= 0) row[iImp]    = sanitize(p.importantPoints);
+
+  sheet.appendRow(row);
+  return { success: true, id: sheet.getLastRow() };
 }
 
 function updateCompany(sheet, p) {
-  const id  = parseInt(p.id);
-  const row = findRow(sheet, id);
-  if (!row) return { error: 'Company not found' };
+  const rowNum = parseInt(p.id);
+  if (rowNum < 2 || rowNum > sheet.getLastRow()) return { error: 'Row not found' };
 
-  sheet.getRange(row, COL.NAME).setValue(sanitize(p.name));
-  sheet.getRange(row, COL.INSTANCE).setValue(sanitize(p.instance));
-  sheet.getRange(row, COL.STATUS).setValue(sanitize(p.status));
-  sheet.getRange(row, COL.NOTES).setValue(sanitize(p.notes));
-  sheet.getRange(row, COL.IMPORTANT_POINTS).setValue(sanitize(p.importantPoints));
+  const headers = getHeaders(sheet);
+  const now     = new Date();
+
+  const iName   = colIndex(headers, 'Company Name');
+  const iStatus = colIndex(headers, 'Status');
+  const iNotes  = colIndex(headers, 'Notes');
+  const iLast   = colIndex(headers, 'Last Updated');
+  const iInst   = colIndex(headers, 'Instance');
+  const iImp    = colIndex(headers, 'Important Points');
+
+  if (iName   >= 0) sheet.getRange(rowNum, iName   + 1).setValue(sanitize(p.name));
+  if (iStatus >= 0) sheet.getRange(rowNum, iStatus + 1).setValue(sanitize(p.status));
+  if (iNotes  >= 0) sheet.getRange(rowNum, iNotes  + 1).setValue(sanitize(p.notes));
+  if (iLast   >= 0) sheet.getRange(rowNum, iLast   + 1).setValue(now);
+  if (iInst   >= 0) sheet.getRange(rowNum, iInst   + 1).setValue(sanitize(p.instance));
+  if (iImp    >= 0) sheet.getRange(rowNum, iImp    + 1).setValue(sanitize(p.importantPoints));
+
   return { success: true };
 }
 
 function deleteCompany(sheet, p) {
-  const id  = parseInt(p.id);
-  const row = findRow(sheet, id);
-  if (!row) return { error: 'Company not found' };
-  sheet.deleteRow(row);
+  const rowNum = parseInt(p.id);
+  if (rowNum < 2 || rowNum > sheet.getLastRow()) return { error: 'Row not found' };
+  sheet.deleteRow(rowNum);
   return { success: true };
-}
-
-function findRow(sheet, id) {
-  const ids = sheet.getRange(2, COL.ID, sheet.getLastRow() - 1, 1).getValues();
-  for (let i = 0; i < ids.length; i++) {
-    if (Number(ids[i][0]) === id) return i + 2;
-  }
-  return null;
-}
-
-function nextId(sheet) {
-  const last = sheet.getLastRow();
-  if (last < 2) return 1;
-  const ids = sheet.getRange(2, COL.ID, last - 1, 1).getValues().flat().filter(Number);
-  return ids.length ? Math.max(...ids) + 1 : 1;
 }
 
 function sanitize(val) {
