@@ -75,6 +75,9 @@
 
         #fImportantPoints { border-color: #d97706; border-width: 1.5px; }
         #fImportantPoints:focus { border-color: #b45309; box-shadow: 0 0 0 0.2rem rgba(217,119,6,0.2); }
+
+        .select-placeholder { color: #adb5bd; }
+        .select-placeholder.selected { color: #212529; }
     </style>
 </head>
 <body>
@@ -206,8 +209,8 @@
 
                 <div class="mb-3">
                     <label class="form-label small fw-semibold">Instance <span class="text-muted fw-normal">(optional)</span></label>
-                    <select class="form-select" id="fInstance">
-                        <option value="" disabled selected hidden>India, US, Europe…</option>
+                    <select class="form-select select-placeholder" id="fInstance" onchange="onSelectChange(this)">
+                        <option value="" disabled selected hidden>Select any one</option>
                         <option value="INDIA">INDIA</option>
                         <option value="US">US</option>
                         <option value="EUROPE">EUROPE</option>
@@ -217,7 +220,8 @@
 
                 <div class="mb-3">
                     <label class="form-label small fw-semibold">Status <span class="text-danger">*</span></label>
-                    <select class="form-select" id="fStatus">
+                    <select class="form-select select-placeholder" id="fStatus" onchange="onSelectChange(this)">
+                        <option value="" disabled selected hidden>Select any one</option>
                         <option value="Active">Active</option>
                         <option value="Demo">Demo</option>
                         <option value="Demo Expired">Demo Expired</option>
@@ -462,15 +466,25 @@ function renderImportantPoints() {
 }
 
 // ── Modal ─────────────────────────────────────────────────────
+function onSelectChange(el) {
+    el.classList.toggle('selected', el.value !== '');
+}
+
+function setSelect(id, val) {
+    const el = document.getElementById(id);
+    el.value = val || '';
+    onSelectChange(el);
+}
+
 function openModal(company = null) {
-    document.getElementById('modalHeading').textContent   = company ? 'Edit Company' : 'Add Company';
-    document.getElementById('editRowId').value            = company ? company.id : '';
-    document.getElementById('fName').value               = company ? company.name : '';
-    document.getElementById('fInstance').value           = company ? (company.instance || '') : '';
-    document.getElementById('fStatus').value             = company ? company.status : 'Active';
-    document.getElementById('fNotes').value              = company ? (company.notes || '') : '';
-    document.getElementById('fImportantPoints').value    = company ? (company.importantPoints || '') : '';
-    document.getElementById('saveBtn').textContent       = company ? 'Update' : 'Add';
+    document.getElementById('modalHeading').textContent = company ? 'Edit Company' : 'Add Company';
+    document.getElementById('editRowId').value          = company ? company.id : '';
+    document.getElementById('fName').value              = company ? company.name : '';
+    setSelect('fInstance', company ? company.instance : '');
+    setSelect('fStatus',   company ? company.status   : '');
+    document.getElementById('fNotes').value             = company ? (company.notes || '') : '';
+    document.getElementById('fImportantPoints').value   = company ? (company.importantPoints || '') : '';
+    document.getElementById('saveBtn').textContent      = company ? 'Update' : 'Add';
     document.getElementById('fName').classList.remove('is-invalid');
     bsModal.show();
     setTimeout(() => document.getElementById('fName').focus(), 350);
@@ -496,6 +510,7 @@ async function saveCompany() {
         return;
     }
     document.getElementById('fName').classList.remove('is-invalid');
+    if (!status) { showToast('Please select a Status.', 'warning'); return; }
 
     const btn = document.getElementById('saveBtn');
     btn.disabled = true;
