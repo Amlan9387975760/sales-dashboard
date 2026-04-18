@@ -46,7 +46,8 @@
         .bp-demo    { background: #fef9c3; color: #a16207; }
         .bp-expired { background: #fee2e2; color: #b91c1c; }
 
-        .notes-cell { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #64748b; }
+        .notes-cell    { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #64748b; }
+        .instance-cell { max-width: 130px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #475569; font-size: 0.83rem; }
 
         #loadingSpinner {
             position: fixed; inset: 0;
@@ -59,6 +60,23 @@
         .setup-banner { background: #fff7ed; border: 1px solid #fdba74; border-radius: 12px; padding: 1rem 1.25rem; color: #7c2d12; }
 
         .modal-content { border-radius: 16px; border: none; }
+
+        /* Important Points Panel */
+        .imp-panel { background: #fff; border-radius: 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.08); padding: 1.25rem; }
+        .imp-panel-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.6px; color: #64748b; font-weight: 600; margin-bottom: 0.85rem; }
+        .imp-item { border-left: 3px solid #2563eb; padding: 0.65rem 1rem; background: #f8faff; border-radius: 0 10px 10px 0; margin-bottom: 0.6rem; }
+        .imp-item:last-child { margin-bottom: 0; }
+        .imp-item .imp-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem; }
+        .imp-item .company-lbl { font-weight: 700; font-size: 0.85rem; color: #1e3a8a; }
+        .imp-item .inst-lbl { font-size: 0.78rem; color: #64748b; }
+        .imp-item .imp-text { font-size: 0.83rem; color: #374151; white-space: pre-wrap; }
+        .imp-item.imp-active  { border-left-color: #16a34a; background: #f0fdf4; }
+        .imp-item.imp-demo    { border-left-color: #d97706; background: #fffbeb; }
+        .imp-item.imp-expired { border-left-color: #dc2626; background: #fff5f5; }
+
+        /* Important points textarea highlight */
+        #fImportantPoints { border-color: #d97706; border-width: 1.5px; }
+        #fImportantPoints:focus { border-color: #b45309; box-shadow: 0 0 0 0.2rem rgba(217,119,6,0.2); }
     </style>
 </head>
 <body>
@@ -76,6 +94,9 @@
         <button class="btn btn-sm btn-outline-light" onclick="loadData()" title="Refresh data">
             <i class="fas fa-rotate-right"></i>
         </button>
+        <button class="btn btn-sm btn-outline-light fw-semibold" onclick="openPdfModal()">
+            <i class="fas fa-file-pdf me-1"></i>Export PDF
+        </button>
         <button class="btn btn-sm btn-light fw-semibold" onclick="openModal()">
             <i class="fas fa-plus me-1"></i>Add Company
         </button>
@@ -85,12 +106,11 @@
 <!-- Main -->
 <div class="container-fluid p-4" id="mainContent" style="display:none">
 
-    <!-- Setup notice (shown when SCRIPT_URL is unconfigured) -->
+    <!-- Setup notice -->
     <div id="setupBanner" class="setup-banner mb-4" style="display:none">
         <i class="fas fa-triangle-exclamation me-2"></i>
         <strong>One-time setup needed:</strong>
         Open <code>index.html</code>, set <code>SCRIPT_URL</code> to your deployed Google Apps Script URL and update <code>SECRET_KEY</code>.
-        See the setup guide in <code>apps-script/Code.gs</code>.
     </div>
 
     <!-- Stats row -->
@@ -141,13 +161,21 @@
         </div>
     </div>
 
+    <!-- Important Points Panel -->
+    <div class="imp-panel mb-4" id="impPanel" style="display:none">
+        <div class="imp-panel-title">
+            <i class="fas fa-star me-1" style="color:#d97706"></i>Important Points
+        </div>
+        <div id="impList"></div>
+    </div>
+
     <!-- Table -->
     <div class="card p-3">
         <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
             <span class="fw-semibold">All Companies</span>
             <input type="search" id="searchBox" class="form-control form-control-sm"
-                   placeholder="Search by name, status, notes…"
-                   style="max-width:240px" oninput="renderTable()">
+                   placeholder="Search by name, instance, status, notes…"
+                   style="max-width:260px" oninput="renderTable()">
         </div>
         <div class="table-responsive">
             <table class="table mb-0">
@@ -155,6 +183,7 @@
                     <tr>
                         <th style="width:40px">#</th>
                         <th>Company Name</th>
+                        <th>Instance</th>
                         <th>Status</th>
                         <th>Notes</th>
                         <th>Date Added</th>
@@ -180,8 +209,12 @@
 
                 <div class="mb-3">
                     <label class="form-label small fw-semibold">Company Name <span class="text-danger">*</span></label>
-                    <input type="text" class="form-control" id="fName" placeholder="e.g. Acme Corp"
-                           onkeydown="if(event.key==='Enter') saveCompany()">
+                    <input type="text" class="form-control" id="fName" placeholder="e.g. Acme Corp">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Instance <span class="text-muted fw-normal">(optional)</span></label>
+                    <input type="text" class="form-control" id="fInstance" placeholder="e.g. app.acme.vantagecircle.com">
                 </div>
 
                 <div class="mb-3">
@@ -193,9 +226,21 @@
                     </select>
                 </div>
 
-                <div class="mb-1">
+                <div class="mb-3">
                     <label class="form-label small fw-semibold">Notes <span class="text-muted fw-normal">(optional)</span></label>
-                    <textarea class="form-control" id="fNotes" rows="3" placeholder="Any relevant context…"></textarea>
+                    <textarea class="form-control" id="fNotes" rows="2" placeholder="Any relevant context…"></textarea>
+                </div>
+
+                <div class="mb-1">
+                    <label class="form-label small fw-semibold">
+                        <i class="fas fa-star me-1" style="color:#d97706;font-size:0.72rem"></i>
+                        Important Points <span class="text-muted fw-normal">(optional)</span>
+                    </label>
+                    <textarea class="form-control" id="fImportantPoints" rows="3"
+                        placeholder="Key highlights, action items, or critical remarks…"></textarea>
+                    <div class="form-text" style="color:#92400e;font-size:0.75rem">
+                        <i class="fas fa-info-circle me-1"></i>These will be highlighted in the dashboard panel above the table.
+                    </div>
                 </div>
             </div>
             <div class="modal-footer border-0 pt-1">
@@ -206,18 +251,60 @@
     </div>
 </div>
 
+<!-- PDF Export Modal -->
+<div class="modal fade" id="pdfModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-1">
+                <h6 class="modal-title fw-bold fs-5">
+                    <i class="fas fa-file-pdf me-2 text-danger"></i>Export to PDF
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="text-muted small mb-3">Select a date range to include companies added within that period.</p>
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold">From Date</label>
+                        <input type="date" class="form-control" id="pdfFrom" onchange="updatePdfPreview()">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold">To Date</label>
+                        <input type="date" class="form-control" id="pdfTo" onchange="updatePdfPreview()">
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Filter by Status <span class="text-muted fw-normal">(optional)</span></label>
+                    <select class="form-select form-select-sm" id="pdfStatus" onchange="updatePdfPreview()">
+                        <option value="">All Statuses</option>
+                        <option value="Active">Active</option>
+                        <option value="Demo">Demo</option>
+                        <option value="Demo Expired">Demo Expired</option>
+                    </select>
+                </div>
+                <div id="pdfPreviewCount" class="p-2 rounded text-center small fw-semibold" style="background:#f1f5f9;color:#1e40af"></div>
+            </div>
+            <div class="modal-footer border-0 pt-1">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger px-4" onclick="downloadPdf()">
+                    <i class="fas fa-download me-1"></i>Download PDF
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
-// ═══════════════════════════════════════════════════════════════
-//  CONFIGURATION  —  update both values after Google Apps setup
-// ═══════════════════════════════════════════════════════════════
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw6tJN86RliD7LF3SqqOf_YSbjsI2UU9OWTak4F0a3H0av46jwxYrLt6lRxPf4_LwX2iQ/exec';
 const SECRET_KEY = 'sales2024secret';
-// ═══════════════════════════════════════════════════════════════
 
 let companies = [];
 let pieInst, barInst;
-const bsModal = new bootstrap.Modal(document.getElementById('companyModal'));
+const bsModal    = new bootstrap.Modal(document.getElementById('companyModal'));
+const bsPdfModal = new bootstrap.Modal(document.getElementById('pdfModal'));
 
 const STATUS_COLORS = {
     'Active':       '#16a34a',
@@ -250,6 +337,7 @@ async function loadData() {
 function finishLoad() {
     renderStats();
     drawCharts();
+    renderImportantPoints();
     renderTable();
     setLoading(false);
 }
@@ -318,6 +406,30 @@ function drawCharts() {
     });
 }
 
+// ── Important Points Panel ────────────────────────────────────
+function renderImportantPoints() {
+    const withPoints = companies.filter(c => (c.importantPoints || '').trim());
+    const panel = document.getElementById('impPanel');
+    const list  = document.getElementById('impList');
+
+    if (!withPoints.length) { panel.style.display = 'none'; return; }
+    panel.style.display = 'block';
+
+    list.innerHTML = withPoints.map(c => {
+        const cls = c.status === 'Active' ? 'imp-active' : c.status === 'Demo' ? 'imp-demo' : 'imp-expired';
+        const inst = c.instance ? `<span class="inst-lbl">· ${esc(c.instance)}</span>` : '';
+        return `
+            <div class="imp-item ${cls}">
+                <div class="imp-header">
+                    <span class="badge-pill ${badgeClass(c.status)}">${esc(c.status)}</span>
+                    <span class="company-lbl">${esc(c.name)}</span>
+                    ${inst}
+                </div>
+                <div class="imp-text">${esc(c.importantPoints)}</div>
+            </div>`;
+    }).join('');
+}
+
 // ── Table ─────────────────────────────────────────────────────
 function renderTable() {
     const q = (document.getElementById('searchBox').value || '').toLowerCase();
@@ -325,13 +437,15 @@ function renderTable() {
         ? companies.filter(c =>
             c.name.toLowerCase().includes(q) ||
             c.status.toLowerCase().includes(q) ||
-            (c.notes || '').toLowerCase().includes(q))
+            (c.instance || '').toLowerCase().includes(q) ||
+            (c.notes || '').toLowerCase().includes(q) ||
+            (c.importantPoints || '').toLowerCase().includes(q))
         : companies;
 
     const tbody = document.getElementById('tableBody');
 
     if (!rows.length) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-5 small">
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-5 small">
             ${companies.length ? 'No results match your search.' : 'No companies yet — add your first one!'}
         </td></tr>`;
         return;
@@ -341,12 +455,13 @@ function renderTable() {
         <tr>
             <td class="text-muted small">${i + 1}</td>
             <td class="fw-medium">${esc(c.name)}</td>
+            <td class="instance-cell" title="${esc(c.instance || '')}">${esc(c.instance) || '<span class="text-muted">—</span>'}</td>
             <td><span class="badge-pill ${badgeClass(c.status)}">${esc(c.status)}</span></td>
             <td class="notes-cell" title="${esc(c.notes || '')}">${esc(c.notes) || '<span class="text-muted">—</span>'}</td>
             <td class="text-muted small">${fmtDate(c.dateAdded)}</td>
             <td>
                 <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-secondary" onclick="editCompany(${c.id})" title="Edit / change status">
+                    <button class="btn btn-outline-secondary" onclick="editCompany(${c.id})" title="Edit">
                         <i class="fas fa-pen" style="font-size:0.7rem"></i>
                     </button>
                     <button class="btn btn-outline-danger" onclick="delCompany(${c.id})" title="Delete">
@@ -360,12 +475,15 @@ function renderTable() {
 
 // ── Modal helpers ─────────────────────────────────────────────
 function openModal(company = null) {
-    document.getElementById('modalHeading').textContent = company ? 'Edit Company' : 'Add Company';
-    document.getElementById('editRowId').value          = company ? company.id : '';
-    document.getElementById('fName').value              = company ? company.name : '';
-    document.getElementById('fStatus').value            = company ? company.status : 'Active';
-    document.getElementById('fNotes').value             = company ? (company.notes || '') : '';
-    document.getElementById('saveBtn').textContent      = company ? 'Update' : 'Add';
+    document.getElementById('modalHeading').textContent       = company ? 'Edit Company' : 'Add Company';
+    document.getElementById('editRowId').value                = company ? company.id : '';
+    document.getElementById('fName').value                    = company ? company.name : '';
+    document.getElementById('fInstance').value               = company ? (company.instance || '') : '';
+    document.getElementById('fStatus').value                  = company ? company.status : 'Active';
+    document.getElementById('fNotes').value                   = company ? (company.notes || '') : '';
+    document.getElementById('fImportantPoints').value         = company ? (company.importantPoints || '') : '';
+    document.getElementById('saveBtn').textContent            = company ? 'Update' : 'Add';
+    document.getElementById('fName').classList.remove('is-invalid');
     bsModal.show();
     setTimeout(() => document.getElementById('fName').focus(), 350);
 }
@@ -377,10 +495,12 @@ function editCompany(id) {
 
 // ── Save ──────────────────────────────────────────────────────
 async function saveCompany() {
-    const id     = document.getElementById('editRowId').value;
-    const name   = document.getElementById('fName').value.trim();
-    const status = document.getElementById('fStatus').value;
-    const notes  = document.getElementById('fNotes').value.trim();
+    const id              = document.getElementById('editRowId').value;
+    const name            = document.getElementById('fName').value.trim();
+    const instance        = document.getElementById('fInstance').value.trim();
+    const status          = document.getElementById('fStatus').value;
+    const notes           = document.getElementById('fNotes').value.trim();
+    const importantPoints = document.getElementById('fImportantPoints').value.trim();
 
     if (!name) {
         document.getElementById('fName').classList.add('is-invalid');
@@ -394,7 +514,7 @@ async function saveCompany() {
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
 
     try {
-        const payload = { key: SECRET_KEY, action: id ? 'update' : 'add', name, status, notes };
+        const payload = { key: SECRET_KEY, action: id ? 'update' : 'add', name, instance, status, notes, importantPoints };
         if (id) payload.id = parseInt(id);
 
         const res  = await fetch(`${SCRIPT_URL}?${new URLSearchParams(payload)}`);
@@ -428,6 +548,118 @@ async function delCompany(id) {
     } catch (e) {
         showToast('Network error — please try again.', 'danger');
     }
+}
+
+// ── PDF Export ────────────────────────────────────────────────
+function openPdfModal() {
+    const today      = new Date().toISOString().split('T')[0];
+    const firstOfMon = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+    document.getElementById('pdfFrom').value   = firstOfMon;
+    document.getElementById('pdfTo').value     = today;
+    document.getElementById('pdfStatus').value = '';
+    updatePdfPreview();
+    bsPdfModal.show();
+}
+
+function getPdfFiltered() {
+    const from   = document.getElementById('pdfFrom').value;
+    const to     = document.getElementById('pdfTo').value;
+    const status = document.getElementById('pdfStatus').value;
+
+    return companies.filter(c => {
+        const d = c.dateAdded ? new Date(c.dateAdded).toISOString().split('T')[0] : null;
+        if (from && d && d < from) return false;
+        if (to   && d && d > to)   return false;
+        if (status && c.status !== status) return false;
+        return true;
+    });
+}
+
+function updatePdfPreview() {
+    const n = getPdfFiltered().length;
+    document.getElementById('pdfPreviewCount').textContent =
+        `${n} ${n === 1 ? 'company' : 'companies'} will be included in the PDF.`;
+}
+
+function downloadPdf() {
+    const filtered = getPdfFiltered();
+    if (!filtered.length) {
+        showToast('No companies match the selected filters.', 'warning');
+        return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+    const from   = document.getElementById('pdfFrom').value;
+    const to     = document.getElementById('pdfTo').value;
+    const status = document.getElementById('pdfStatus').value;
+
+    // Header band
+    doc.setFillColor(26, 58, 110);
+    doc.rect(0, 0, 297, 22, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont(undefined, 'bold');
+    doc.text('Sales Dashboard Report', 14, 11);
+    doc.setFontSize(8.5);
+    doc.setFont(undefined, 'normal');
+    const period = `Period: ${from || 'All time'} → ${to || 'today'}${status ? '  |  Status: ' + status : ''}  |  Generated: ${new Date().toLocaleDateString('en-GB')}`;
+    doc.text(period, 14, 18);
+
+    // Summary line
+    const counts = countByStatus(filtered);
+    doc.setTextColor(30, 30, 30);
+    doc.setFontSize(8.5);
+    doc.setFont(undefined, 'bold');
+    doc.text(
+        `Total: ${filtered.length}   Active: ${counts.Active}   Demo: ${counts.Demo}   Demo Expired: ${counts['Demo Expired']}`,
+        14, 29
+    );
+
+    // Table
+    doc.autoTable({
+        startY: 33,
+        head: [['#', 'Company Name', 'Instance', 'Status', 'Notes', 'Important Points', 'Date Added']],
+        body: filtered.map((c, i) => [
+            i + 1,
+            c.name || '',
+            c.instance || '—',
+            c.status || '',
+            c.notes || '—',
+            c.importantPoints || '—',
+            fmtDate(c.dateAdded)
+        ]),
+        styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
+        headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+        columnStyles: {
+            0: { cellWidth: 10 },
+            1: { cellWidth: 44 },
+            2: { cellWidth: 44 },
+            3: { cellWidth: 28 },
+            4: { cellWidth: 48 },
+            5: { cellWidth: 62 },
+            6: { cellWidth: 28 }
+        },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        didParseCell: (data) => {
+            if (data.section === 'body' && data.column.index === 3) {
+                const s = filtered[data.row.index]?.status;
+                const map = { 'Active': [22,163,74], 'Demo': [180,90,6], 'Demo Expired': [185,28,28] };
+                data.cell.styles.textColor = map[s] || [100,116,139];
+                data.cell.styles.fontStyle = 'bold';
+            }
+            if (data.section === 'body' && data.column.index === 5 && data.cell.raw !== '—') {
+                data.cell.styles.fontStyle = 'bold';
+                data.cell.styles.textColor = [92, 60, 6];
+            }
+        }
+    });
+
+    const fname = `sales-report-${from || 'all'}-to-${to || 'all'}.pdf`;
+    doc.save(fname);
+    bsPdfModal.hide();
+    showToast('PDF downloaded.', 'success');
 }
 
 // ── Utilities ─────────────────────────────────────────────────
